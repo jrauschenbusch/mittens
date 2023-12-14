@@ -15,11 +15,16 @@
 package warmup
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"log"
 	"math/rand"
 	"mittens/internal/pkg/grpc"
 	"mittens/internal/pkg/http"
 	"mittens/internal/pkg/safe"
+	"slices"
+	"strings"
 
 	"sync"
 	"time"
@@ -34,6 +39,7 @@ type Warmup struct {
 	GrpcRequests             []grpc.Request
 	RequestDelayMilliseconds int
 	ConcurrencyTargetSeconds int
+	GZipCompression          bool
 }
 
 func (w Warmup) GetWarmupHTTPRequests(maxDurationSeconds int) chan http.Request {
@@ -132,7 +138,22 @@ func (w Warmup) HTTPWarmupWorker(wg *sync.WaitGroup, requests <-chan http.Reques
 	for request := range requests {
 		time.Sleep(time.Duration(requestDelayMilliseconds) * time.Millisecond)
 
-		resp := w.Target.httpClient.SendRequest(request.Method, request.Path, headers, request.Body)
+		var body io.Reader
+		if request.Body != nil {
+			if w.GZipCompression == true {
+				for i, v := range headers {
+					headers[i] = strings.ToLower(v)
+				}
+				if !slices.Contains(headers, "content-encoding: gzip") {
+					headers = append(headers, "content-encoding: gzip")
+				}
+				body = w.GZipCompressBody(*request.Body)
+			} else {
+				body = bytes.NewBufferString(*request.Body)
+			}
+		}
+
+		resp := w.Target.httpClient.SendRequest(request.Method, request.Path, headers, body)
 
 		if resp.Err != nil {
 			log.Printf("🔴 Error in request for %s: %v", request.Path, resp.Err)
@@ -147,6 +168,17 @@ func (w Warmup) HTTPWarmupWorker(wg *sync.WaitGroup, requests <-chan http.Reques
 		}
 	}
 	wg.Done()
+}
+
+func (w Warmup) GZipCompressBody(body string) io.Reader {
+	pr, pw := io.Pipe()
+	go func() {
+		gz := gzip.NewWriter(pw)
+		_, err := gz.Write([]byte(body))
+		gz.Close()
+		pw.CloseWithError(err)
+	}()
+	return pr
 }
 
 // GrpcWarmupWorker sends gRPC requests to the target using goroutines.
