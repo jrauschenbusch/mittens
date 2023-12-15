@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"mittens/fixture"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,14 +41,16 @@ func TestMain(m *testing.M) {
 func TestRequestSuccess(t *testing.T) {
 	c := NewClient(serverUrl, false, 10000)
 	reqBody := ""
-	resp := c.SendRequest("GET", WorkingPath, []string{}, &reqBody)
+	reader := strings.NewReader(reqBody)
+	resp := c.SendRequest("GET", WorkingPath, []string{}, reader)
 	assert.Nil(t, resp.Err)
 }
 
 func TestHttpError(t *testing.T) {
 	c := NewClient(serverUrl, false, 10000)
 	reqBody := ""
-	resp := c.SendRequest("GET", "/", []string{}, &reqBody)
+	reader := strings.NewReader(reqBody)
+	resp := c.SendRequest("GET", "/", []string{}, reader)
 	assert.Nil(t, resp.Err)
 	assert.Equal(t, resp.StatusCode, 404)
 }
@@ -55,7 +58,8 @@ func TestHttpError(t *testing.T) {
 func TestConnectionError(t *testing.T) {
 	c := NewClient("http://localhost:9999", false, 10000)
 	reqBody := ""
-	resp := c.SendRequest("GET", "/potato", []string{}, &reqBody)
+	reader := strings.NewReader(reqBody)
+	resp := c.SendRequest("GET", "/potato", []string{}, reader)
 	assert.NotNil(t, resp.Err)
 }
 

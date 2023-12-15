@@ -20,6 +20,8 @@ import (
 	"mittens/internal/pkg/grpc"
 	"mittens/internal/pkg/http"
 	"mittens/internal/pkg/warmup"
+	"slices"
+	"strings"
 )
 
 // Root stores all the flags.
@@ -32,7 +34,6 @@ type Root struct {
 	ConcurrencyTargetSeconds int
 	ExitAfterWarmup          bool
 	FailReadiness            bool
-	GZipCompression          bool
 	FileProbe
 	Target
 	HTTP
@@ -55,7 +56,6 @@ func (r *Root) InitFlags() {
 	flag.IntVar(&r.ConcurrencyTargetSeconds, "concurrency-target-seconds", 0, "Time taken to reach expected concurrency. This is useful to ramp up traffic.")
 	flag.BoolVar(&r.ExitAfterWarmup, "exit-after-warmup", false, "If warm up process should finish after completion. This is useful to prevent container restarts.")
 	flag.BoolVar(&r.FailReadiness, "fail-readiness", false, "If set to true readiness will fail if no requests were sent.")
-	flag.BoolVar(&r.GZipCompression, "gzip-compression", false, "If set to true body will be gzip compressed.")
 
 	r.FileProbe.initFlags()
 	r.Target.initFlags()
@@ -121,7 +121,16 @@ func (r *Root) GetWarmupTargetOptions() (warmup.TargetOptions, error) {
 
 // GetWarmupHTTPHeaders returns the HTTP headers.
 func (r *Root) GetWarmupHTTPHeaders() []string {
-	return r.HTTPHeaders.getWarmupHTTPHeaders()
+	var headers = r.HTTPHeaders.getWarmupHTTPHeaders()
+	if r.GZipCompression == true {
+		for i, v := range headers {
+			headers[i] = strings.ToLower(v)
+		}
+		if !slices.Contains(headers, "content-encoding: gzip") {
+			headers = append(headers, "content-encoding: gzip")
+		}
+	}
+	return headers
 }
 
 // GetWarmupHTTPRequests HTTP requests.

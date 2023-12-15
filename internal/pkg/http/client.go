@@ -15,7 +15,6 @@
 package http
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -53,9 +52,7 @@ func (c Client) SendRequest(method, path string, headers []string, body io.Reade
 	const respType = "http"
 
 	url := fmt.Sprintf("%s/%s", c.host, strings.TrimLeft(path, "/"))
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	req, err := http.NewRequest(method, url, body)
 
 	if err != nil {
 		log.Printf("Failed to create request: %s %s: %v", method, url, err)
@@ -73,11 +70,9 @@ func (c Client) SendRequest(method, path string, headers []string, body io.Reade
 
 		req.Header.Add(k, interpolatedHeaderValue)
 	}
-
 	if err != nil {
 		defer req.Body.Close()
 	}
-
 	startTime := time.Now()
 	resp, err := c.httpClient.Do(req)
 	if resp != nil {

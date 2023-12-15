@@ -15,6 +15,7 @@
 package http
 
 import (
+	"bytes"
 	"net/http"
 	"os"
 	"regexp"
@@ -28,12 +29,14 @@ import (
 
 func TestHttp_FlagToHttpRequest(t *testing.T) {
 	requestFlag := `post:/db:{"db": "true"}`
-	request, err := ToHTTPRequest(requestFlag)
+	request, err := ToHTTPRequest(requestFlag, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.MethodPost, request.Method)
 	assert.Equal(t, "/db", request.Path)
-	assert.Equal(t, `{"db": "true"}`, *request.Body)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(request.Body)
+	assert.Equal(t, `{"db": "true"}`, buf.String())
 }
 
 func TestBodyFromFile(t *testing.T) {
@@ -43,17 +46,19 @@ func TestBodyFromFile(t *testing.T) {
 	defer os.Remove(file)
 
 	requestFlag := `post:/db:file:` + file
-	request, err := ToHTTPRequest(requestFlag)
+	request, err := ToHTTPRequest(requestFlag, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.MethodPost, request.Method)
 	assert.Equal(t, "/db", request.Path)
-	assert.Equal(t, `{"foo": "bar"}`, *request.Body)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(request.Body)
+	assert.Equal(t, `{"foo": "bar"}`, buf.String())
 }
 
 func TestHttp_FlagWithoutBodyToHttpRequest(t *testing.T) {
 	requestFlag := `get:ping`
-	request, err := ToHTTPRequest(requestFlag)
+	request, err := ToHTTPRequest(requestFlag, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.MethodGet, request.Method)
@@ -63,30 +68,32 @@ func TestHttp_FlagWithoutBodyToHttpRequest(t *testing.T) {
 
 func TestHttp_FlagWithInvalidMethodToHttpRequest(t *testing.T) {
 	requestFlag := `hmm:/ping:all=true`
-	_, err := ToHTTPRequest(requestFlag)
+	_, err := ToHTTPRequest(requestFlag, false)
 	require.Error(t, err)
 }
 
 func TestHttp_TimestampInterpolation(t *testing.T) {
 	requestFlag := `post:/path_{$currentTimestamp}:{"body": "{$currentTimestamp}"}`
-	request, err := ToHTTPRequest(requestFlag)
+	request, err := ToHTTPRequest(requestFlag, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.MethodPost, request.Method)
 
 	var numbersRegex = regexp.MustCompile("\\d+")
 	matchPath := numbersRegex.MatchString(request.Path)
-	matchBody := numbersRegex.MatchString(*request.Body)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(request.Body)
+	matchBody := numbersRegex.MatchString(buf.String())
 
 	assert.True(t, matchPath)
 	assert.True(t, matchBody)
-	assert.Equal(t, len(request.Path), 19)  //  "path_ + 13 numbers for timestamp
-	assert.Equal(t, len(*request.Body), 25) // { "body": 13 numbers for timestamp
+	assert.Equal(t, len(request.Path), 19) //  "path_ + 13 numbers for timestamp
+	assert.Equal(t, len(buf.String()), 25) // { "body": 13 numbers for timestamp
 }
 
 func TestHttp_Interpolation(t *testing.T) {
 	requestFlag := `post:/path_{$range|min=1,max=2}_{$random|foo,bar}:{"body": "{$random|foo,bar} {$range|min=1,max=2}"}`
-	request, err := ToHTTPRequest(requestFlag)
+	request, err := ToHTTPRequest(requestFlag, false)
 	require.NoError(t, err)
 
 	assert.Equal(t, http.MethodPost, request.Method)
@@ -95,7 +102,9 @@ func TestHttp_Interpolation(t *testing.T) {
 	matchPath := pathRegex.MatchString(request.Path)
 
 	var bodyRegex = regexp.MustCompile("{\"body\": \"(foo|bar) \\d\"}")
-	matchBody := bodyRegex.MatchString(*request.Body)
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(request.Body)
+	matchBody := bodyRegex.MatchString(buf.String())
 
 	assert.True(t, matchPath)
 	assert.True(t, matchBody)

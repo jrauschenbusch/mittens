@@ -15,7 +15,10 @@
 package http
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
+	"io"
 	"mittens/internal/pkg/placeholders"
 	"strings"
 )
@@ -24,7 +27,7 @@ import (
 type Request struct {
 	Method string
 	Path   string
-	Body   *string
+	Body   io.Reader
 }
 
 var allowedHTTPMethods = map[string]interface{}{
@@ -41,7 +44,7 @@ var allowedHTTPMethods = map[string]interface{}{
 
 //
 // ToHTTPRequest parses an HTTP request which is in a string format and stores it in a struct.
-func ToHTTPRequest(requestString string) (Request, error) {
+func ToHTTPRequest(requestString string, gzipCompression bool) (Request, error) {
 	parts := strings.SplitN(requestString, ":", 3)
 	if len(parts) < 2 {
 		return Request{}, fmt.Errorf("invalid request flag: %s, expected format <http-method>:<path>[:body]", requestString)
@@ -70,11 +73,29 @@ func ToHTTPRequest(requestString string) (Request, error) {
 	if err != nil {
 		return Request{}, fmt.Errorf("unable to parse body for request: %s", parts[2])
 	}
-	var body = placeholders.InterpolatePlaceholders(*rawBody)
+	var interpolatedBody = placeholders.InterpolatePlaceholders(*rawBody)
+
+	var reader io.Reader
+	if gzipCompression == true {
+		reader = GZipCompressBody(interpolatedBody)
+	} else {
+		reader = bytes.NewBufferString(interpolatedBody)
+	}
 
 	return Request{
 		Method: method,
 		Path:   path,
-		Body:   &body,
+		Body:   reader,
 	}, nil
+}
+
+func GZipCompressBody(body string) io.Reader {
+	pr, pw := io.Pipe()
+	go func() {
+		gz := gzip.NewWriter(pw)
+		_, err := gz.Write([]byte(body))
+		gz.Close()
+		pw.CloseWithError(err)
+	}()
+	return pr
 }

@@ -34,7 +34,8 @@ var allowedHTTPMethods = map[string]interface{}{
 
 // HTTP stores flags related to HTTP requests.
 type HTTP struct {
-	Requests stringArray
+	Requests        stringArray
+	GZipCompression bool
 }
 
 func (h *HTTP) String() string {
@@ -43,16 +44,17 @@ func (h *HTTP) String() string {
 
 func (h *HTTP) initFlags() {
 	flag.Var(&h.Requests, "http-requests", `HTTP request to be sent. Request is in '<http-method>:<path>[:body]' format. E.g. post:/ping:{"key":"value"}`)
+	flag.BoolVar(&h.GZipCompression, "http-requests-gzip-compression", false, "If set to true HTTP body will be gzip compressed.")
 }
 
 func (h *HTTP) getWarmupHTTPRequests() ([]http.Request, error) {
-	return toHTTPRequests(h.Requests)
+	return toHTTPRequests(h.Requests, h.GZipCompression)
 }
 
-func toHTTPRequests(requestsFlag []string) ([]http.Request, error) {
+func toHTTPRequests(requestsFlag []string, gzipCompression bool) ([]http.Request, error) {
 	var requests []http.Request
 	for _, requestFlag := range requestsFlag {
-		request, err := http.ToHTTPRequest(requestFlag)
+		request, err := http.ToHTTPRequest(requestFlag, gzipCompression)
 		if err != nil {
 			return nil, err
 		}

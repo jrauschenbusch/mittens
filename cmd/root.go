@@ -113,7 +113,6 @@ func run() int {
 					HttpHeaders:              opts.GetWarmupHTTPHeaders(),
 					RequestDelayMilliseconds: opts.RequestDelayMilliseconds,
 					ConcurrencyTargetSeconds: opts.GetConcurrencyTargetSeconds(),
-					GZipCompression:          opts.GZipCompression,
 				}
 
 				wp.Run(hasHttpRequests, hasGrpcRequests, maxDurationInSeconds, &requestsSentCounter)
